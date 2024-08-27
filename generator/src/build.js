@@ -581,7 +581,7 @@ async function compileElm(options, config) {
   const patchedCode = patchFrozenViews(elmCode);
   await fsPromises.writeFile(fullOutputPath, patchedCode);
 
-  if (!options.debug) {
+  if (options.terser && !options.debug) {
     await runTerser(fullOutputPath);
   }
 
