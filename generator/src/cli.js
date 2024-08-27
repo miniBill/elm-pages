@@ -32,6 +32,7 @@ async function main() {
   program
     .command("build")
     .option("--debug", "Skip terser and run elm make with --debug")
+    .option("--no-terser", "Skip terser")
     .option(
       "--optimize <level>",
       [
