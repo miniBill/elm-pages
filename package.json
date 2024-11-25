@@ -32,7 +32,7 @@
     "commander": "^11.1.0",
     "connect": "^3.7.0",
     "cookie-signature": "^1.2.1",
-    "cross-spawn": "7.0.3",
+    "cross-spawn": "7.0.5",
     "devcert": "^1.2.2",
     "elm-doc-preview": "^5.0.5",
     "elm-hot": "^1.1.6",
