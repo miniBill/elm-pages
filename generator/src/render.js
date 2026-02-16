@@ -466,21 +466,25 @@ async function runHttpJob(requestHash, portsFile, mode, requestToPerform) {
   }
 }
 
-function stringResponse(request, string) {
-  return {
-    request,
-    response: { bodyKind: "string", body: string },
-  };
-}
+/**
+ * @template R
+ * @template J
+ * @param {R} request
+ * @param {J} json
+ * @returns {{ request: R; response: { bodyKind: "json"; body: J; }}}
+ */
 function jsonResponse(request, json) {
   return {
     request,
     response: { bodyKind: "json", body: json },
   };
 }
+
 /**
- * @param {any} request
- * @param {WithImplicitCoercion<ArrayBuffer | SharedArrayBuffer>} buffer
+ * @template R
+ * @param {R} request
+ * @param {import("node:buffer").WithImplicitCoercion<ArrayBuffer | SharedArrayBuffer>} buffer
+ * @returns {{ request: R; response: { bodyKind: "bytes"; body: string; }}}
  */
 function bytesResponse(request, buffer) {
   return {
@@ -493,6 +497,10 @@ function bytesResponse(request, buffer) {
 }
 
 /**
+ * @param {any} requestHash
+ * @param {any} app
+ * @param {any} patternsToWatch
+ * @param {any} portsFile
  * @param {{ url: string; body: { args: any[] } }} requestToPerform
  */
 async function runInternalJob(
@@ -652,14 +660,24 @@ async function runWhich(req) {
   }
 }
 
+/**
+ * @param {{ url?: string; body: { args: [{ prompt: string; }] }; }} req
+ */
 async function runQuestion(req) {
-  return jsonResponse(req, await question(req.body.args[0]));
+  return jsonResponse(req, await question(req.body.args[0].prompt));
 }
 
+/**
+ * @param {any} req
+ */
 async function runReadKey(req) {
   return jsonResponse(req, await readKey());
 }
 
+/**
+ * @param {{ url?: string; body?: any; dir: string[]; quiet: boolean; env: { [key: string]: string; }; }} req
+ * @param {{ [x: string]: (arg0: any, arg1: { cwd: string; quiet: boolean; env: object; }) => any; }} portsFile
+ */
 function runStream(req, portsFile) {
   return new Promise(async (resolve) => {
     const context = getContext(req);
@@ -767,12 +785,12 @@ function runStream(req, portsFile) {
 /**
  * @param {?import('node:stream').Stream} lastStream
  * @param {StreamPart} part
- * @param {{cwd: string;quiet: boolean;env: object;}} param2
+ * @param {{ cwd: string; quiet: boolean; env: object; }} param2
  * @param {{ [x: string]: (arg0: any, arg1: { cwd: string; quiet: boolean; env: object; }) => any; }} portsFile
- * @param {{ (value: any): void; (arg0: { error: any; }): void; }} resolve
+ * @param {((value: any) => void) | ((arg0: { error: any; }) => void) } resolve
  * @param {boolean} isLastProcess
  * @param {string} kind
- * @returns {Promise<{stream: import('node:stream').Stream;metadata?: any;}>}
+ * @returns {Promise<{ stream: import('node:stream').Stream; metadata?: Promise<any> | (() => any); }>}
  */
 async function pipePartToStream(
   lastStream,
@@ -870,7 +888,6 @@ async function pipePartToStream(
       endStreamIfNoInput(gzip);
     }
     return {
-      metadata: null,
       stream: pipeIfPossible(lastStream, gzip),
     };
   } else if (part.name === "unzip") {
@@ -883,7 +900,6 @@ async function pipePartToStream(
       endStreamIfNoInput(unzip);
     }
     return {
-      metadata: null,
       stream: pipeIfPossible(lastStream, unzip),
     };
   } else if (part.name === "fileWrite") {
@@ -906,7 +922,6 @@ async function pipePartToStream(
       endStreamIfNoInput(newLocal);
     }
     return {
-      metadata: null,
       stream: newLocal,
     };
   } else if (part.name === "httpWrite") {
@@ -1017,10 +1032,10 @@ async function pipePartToStream(
         metadata: metadataPromise,
       };
     } else {
-      return { metadata: null, stream: newStream };
+      return { stream: newStream };
     }
   } else if (part.name === "fromString") {
-    return { stream: Readable.from([part.string]), metadata: null };
+    return { stream: Readable.from([part.string]) };
   } else {
     // console.error(`Unknown stream part: ${part.name}!`);
     // process.exit(1);
@@ -1094,22 +1109,29 @@ function stderr() {
   });
 }
 
+/**
+ * @param {Promise<any> | (() => Promise<any>) | null | undefined} func
+ */
 async function tryCallingFunction(func) {
   if (func) {
-    // if is promise
-    if (func.then) {
-      return await func;
-    }
     // if is function
-    else if (typeof func === "function") {
+    if (typeof func === "function") {
       return await func();
+    }
+    // if is promise
+    else {
+      return await func;
     }
   } else {
     return func;
   }
 }
 
-export async function question({ prompt }) {
+/**
+ * @param {string} prompt
+ * @returns {Promise<string>}
+ */
+export async function question(prompt) {
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: process.stdin,
@@ -1215,6 +1237,10 @@ function runStopSpinner(req) {
   return jsonResponse(req, null);
 }
 
+/**
+ * @param {{ url?: string; body: any; dir: string[]; }} req
+ * @param {{ add: (arg0: any) => void; }} patternsToWatch
+ */
 async function runGlobNew(req, patternsToWatch) {
   try {
     const { pattern, options } = req.body.args[0];
@@ -1254,6 +1280,9 @@ async function runGlobNew(req, patternsToWatch) {
   }
 }
 
+/**
+ * @param {{ url?: string; body: any; }} req
+ */
 async function runLogJob(req) {
   try {
     console.log(req.body.args[0].message);
@@ -1263,6 +1292,11 @@ async function runLogJob(req) {
     throw e;
   }
 }
+
+/**
+ * @param {{ url?: string; body: any; }} req
+ * @param {any} patternsToWatch
+ */
 async function runEnvJob(req, patternsToWatch) {
   try {
     const expectedEnv = req.body.args[0];
@@ -1272,6 +1306,11 @@ async function runEnvJob(req, patternsToWatch) {
     throw e;
   }
 }
+
+/**
+ * @param {{ url?: string; body: any; }} req
+ * @param {any} patternsToWatch
+ */
 async function runEncryptJob(req, patternsToWatch) {
   try {
     return jsonResponse(
@@ -1284,14 +1323,18 @@ async function runEncryptJob(req, patternsToWatch) {
   } catch (e) {
     throw {
       title: "BackendTask Encrypt Error",
-      message:
-        e.toString() + e.stack + "\n\n" + JSON.stringify(rawRequest, null, 2),
+      message: e.toString() + e.stack + "\n\n" + JSON.stringify(req, null, 2),
     };
   }
 }
+
+/**
+ * @param {{ url?: string; body: any; }} req
+ * @param {any} patternsToWatch
+ */
 async function runDecryptJob(req, patternsToWatch) {
   try {
-    // TODO if unsign returns `false`, need to have an `Err` in Elm because decryption failed
+    // TODO if tryDecodeCookie returns `null`, need to have an `Err` in Elm because decryption failed
     const signed = tryDecodeCookie(
       req.body.args[0].input,
       req.body.args[0].secrets
@@ -1301,8 +1344,7 @@ async function runDecryptJob(req, patternsToWatch) {
   } catch (e) {
     throw {
       title: "BackendTask Decrypt Error",
-      message:
-        e.toString() + e.stack + "\n\n" + JSON.stringify(rawRequest, null, 2),
+      message: e.toString() + e.stack + "\n\n" + JSON.stringify(req, null, 2),
     };
   }
 }
@@ -1319,6 +1361,12 @@ function sendError(app, error) {
     data: error,
   });
 }
+
+/**
+ * @param {string} input
+ * @param {crypto.CipherKey[]} secrets
+ * @returns {string | null}
+ */
 function tryDecodeCookie(input, secrets) {
   if (secrets.length > 0) {
     const signed = cookie.unsign(input, secrets[0]);
