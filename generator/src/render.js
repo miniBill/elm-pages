@@ -500,23 +500,39 @@ function bytesResponse(request, buffer) {
 /**
  * @template U
  * @template A
- * @typedef {{ url: U; body: { args: A } }} InternalJobWith<U,A>
+ * @typedef {{ url: U; body: { args: A }; dir: string[]; quiet: boolean; env: { [key:string]: string; } }} InternalJobWith<U,A>
  */
 
 /**
  * @typedef {InternalJobWith<"elm-pages-internal://log", [{message: string}]>} InternalLogJob
  * @typedef {InternalJobWith<"elm-pages-internal://env", [string]>} InternalEnvJob
- * @typedef {InternalJobWith<"elm-pages-internal://read-file", [unknown, string]> & { dir: string[]; }} InternalReadFileJob
+ * @typedef {InternalJobWith<"elm-pages-internal://read-file", [unknown, string]>} InternalReadFileJob
  * @typedef {InternalJobWith<"elm-pages-internal://read-file-binary", [unknown, string]>} InternalReadFileBinaryJob
- * @typedef {InternalLogJob | InternalEnvJob | InternalReadFileJob | InternalReadFileBinaryJob} InternalJob
+ * @typedef {InternalJobWith<"elm-pages-internal://glob", [{pattern: string; options: { dot: boolean; followSymbolicLinks: boolean; caseSensitiveMatch: boolean; gitIgnore: boolean; deep?: number; onlyFiles: boolean; onlyDirectories: boolean; stats: boolean}}]>} InternalGlobJob
+ * @typedef {InternalJobWith<"elm-pages-internal://randomSeed", unknown>} InternalRandomSeedJob
+ * @typedef {InternalJobWith<"elm-pages-internal://now", unknown>} InternalNowJob
+ * @typedef {InternalJobWith<"elm-pages-internal://encrypt", [{values: unknown; secret: string;}]>} InternalEncryptJob
+ * @typedef {InternalJobWith<"elm-pages-internal://decrypt", [{input: string; secrets: string[];}]>} InternalDecryptJob
+ * @typedef {InternalJobWith<"elm-pages-internal://write-file", [{path: string; body: string; }]>} InternalWriteFileJob
+ * @typedef {InternalJobWith<"elm-pages-internal://sleep", [{milliseconds: number}]>} InternalSleepJob
+ * @typedef {InternalJobWith<"elm-pages-internal://which", [string]>} InternalWhichJob
+ * @typedef {InternalJobWith<"elm-pages-internal://question", [{prompt: string; }]>} InternalQuestionJob
+ * @typedef {InternalJobWith<"elm-pages-internal://readKey", unknown>} InternalReadKeyJob
+ * @typedef {InternalJobWith<"elm-pages-internal://shell", [{captureOutput: boolean; commands: ElmCommand[]}]>} InternalShellJob
+ * @typedef {InternalJobWith<"elm-pages-internal://stream", unknown>} InternalStreamJob
+ * @typedef {InternalJobWith<"elm-pages-internal://start-spinner", unknown>} InternalStartSpinnerJob
+ * @typedef {InternalJobWith<"elm-pages-internal://stop-spinner", unknown>} InternalStopSpinnerJob
+ *
+ *
+ * @typedef {InternalLogJob | InternalEnvJob | InternalReadFileJob | InternalReadFileBinaryJob | InternalGlobJob | InternalRandomSeedJob | InternalNowJob | InternalEncryptJob | InternalDecryptJob |InternalWriteFileJob | InternalSleepJob| InternalWhichJob | InternalQuestionJob | InternalReadKeyJob | InternalShellJob | InternalStreamJob | InternalStartSpinnerJob | InternalStopSpinnerJob} InternalJob
  *
  */
 
 /**
- * @param {any} requestHash
- * @param {any} app
- * @param {any} patternsToWatch
- * @param {any} portsFile
+ * @param {unknown} requestHash
+ * @param {unknown} app
+ * @param {{ add(pattern: string): void; }} patternsToWatch
+ * @param {unknown} portsFile
  * @param {InternalJob} requestToPerform
  */
 async function runInternalJob(
@@ -558,15 +574,9 @@ async function runInternalJob(
       case "elm-pages-internal://env":
         return [requestHash, await runEnvJob(requestToPerform)];
       case "elm-pages-internal://encrypt":
-        return [
-          requestHash,
-          await runEncryptJob(requestToPerform, patternsToWatch),
-        ];
+        return [requestHash, await runEncryptJob(requestToPerform)];
       case "elm-pages-internal://decrypt":
-        return [
-          requestHash,
-          await runDecryptJob(requestToPerform, patternsToWatch),
-        ];
+        return [requestHash, await runDecryptJob(requestToPerform)];
       case "elm-pages-internal://write-file":
         return [requestHash, await runWriteFileJob(requestToPerform)];
       case "elm-pages-internal://sleep":
@@ -594,7 +604,8 @@ async function runInternalJob(
 }
 
 /**
- * @param {{ dir: string[]; quiet: boolean; env: { [key:string]: string; }; }} requestToPerform
+ * @param {InternalJobWith<string, unknown>} requestToPerform
+ * @returns {{ cwd: string; quiet: boolean; env: NodeJS.ProcessEnv}}
  */
 function getContext(requestToPerform) {
   const cwd = path.resolve(...requestToPerform.dir);
@@ -660,6 +671,9 @@ async function readFileBinaryJobNew(req, patternsToWatch) {
   }
 }
 
+/**
+ * @param {InternalSleepJob} req
+ */
 function runSleep(req) {
   const { milliseconds } = req.body.args[0];
   return new Promise((resolve) => {
@@ -669,6 +683,9 @@ function runSleep(req) {
   });
 }
 
+/**
+ * @param {InternalWhichJob} req
+ */
 async function runWhich(req) {
   const command = req.body.args[0];
   try {
@@ -679,21 +696,21 @@ async function runWhich(req) {
 }
 
 /**
- * @param {{ url?: string; body: { args: [{ prompt: string; }] }; }} req
+ * @param {InternalQuestionJob} req
  */
 async function runQuestion(req) {
   return jsonResponse(req, await question(req.body.args[0].prompt));
 }
 
 /**
- * @param {any} req
+ * @param {InternalReadKeyJob} req
  */
 async function runReadKey(req) {
   return jsonResponse(req, await readKey());
 }
 
 /**
- * @param {{ url?: string; body?: any; dir: string[]; quiet: boolean; env: { [key: string]: string; }; }} req
+ * @param {InternalStreamJob} req
  * @param {{ [x: string]: (arg0: any, arg1: { cwd: string; quiet: boolean; env: object; }) => any; }} portsFile
  */
 function runStream(req, portsFile) {
@@ -781,7 +798,7 @@ function runStream(req, portsFile) {
  *
  * @typedef {StreamPartWith<"fromString", { string: string; }>} FromStringPart
  * @typedef {StreamPartWith<"command", { command: string; args: string[]; allowNon0Status: boolean; output: "Ignore" | "Print" | "MergeWithStdout" | "InsteadOfStdout"; timeoutInMs: number?; }>} CommandPart
- * @typedef {StreamPartWith<"httpWrite", { url: string; method: string; headers: { key: string; value: string; }[]; body?: import("./request-cache.js").StaticHttpBody; retries: number?; timeoutInMs: number?; }>} HttpWritePart
+ * @typedef {StreamPartWith<"httpWrite", { url: string; method: string; headers: { key: string; value: string; }[]; body?: StaticHttpBody; retries: number?; timeoutInMs: number?; }>} HttpWritePart
  * @typedef {StreamPartWith<"fileRead", { path: string; }>} FileReadPart
  * @typedef {StreamPartWith<"fileWrite", { path: string; }>} FileWritePart
  * @typedef {StreamPartWith<"customRead", { portName: string; input: any; }>} CustomReadPart
@@ -1212,6 +1229,9 @@ export async function readKey() {
   });
 }
 
+/**
+ * @param {InternalWriteFileJob} req
+ */
 async function runWriteFileJob(req) {
   const cwd = path.resolve(...req.dir);
   const data = req.body.args[0];
@@ -1263,7 +1283,7 @@ function runStopSpinner(req) {
 }
 
 /**
- * @param {{ url?: string; body: any; dir: string[]; }} req
+ * @param {InternalGlobJob} req
  * @param {{ add: (arg0: any) => void; }} patternsToWatch
  */
 async function runGlobNew(req, patternsToWatch) {
@@ -1332,10 +1352,9 @@ async function runEnvJob(req) {
 }
 
 /**
- * @param {{ url?: string; body: any; }} req
- * @param {any} patternsToWatch
+ * @param {InternalEncryptJob} req
  */
-async function runEncryptJob(req, patternsToWatch) {
+async function runEncryptJob(req) {
   try {
     return jsonResponse(
       req,
@@ -1353,10 +1372,9 @@ async function runEncryptJob(req, patternsToWatch) {
 }
 
 /**
- * @param {{ url?: string; body: any; }} req
- * @param {any} patternsToWatch
+ * @param {InternalDecryptJob} req
  */
-async function runDecryptJob(req, patternsToWatch) {
+async function runDecryptJob(req) {
   try {
     // TODO if tryDecodeCookie returns `null`, need to have an `Err` in Elm because decryption failed
     const signed = tryDecodeCookie(
