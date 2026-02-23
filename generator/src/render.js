@@ -519,7 +519,7 @@ function bytesResponse(request, buffer) {
  * @typedef {InternalJobWith<"elm-pages-internal://question", [{prompt: string; }]>} InternalQuestionJob
  * @typedef {InternalJobWith<"elm-pages-internal://readKey", unknown>} InternalReadKeyJob
  * @typedef {InternalJobWith<"elm-pages-internal://shell", [{captureOutput: boolean; commands: ElmCommand[]}]>} InternalShellJob
- * @typedef {InternalJobWith<"elm-pages-internal://stream", unknown>} InternalStreamJob
+ * @typedef {InternalJobWith<"elm-pages-internal://stream", [{ kind: string; parts: StreamPart[]}]>} InternalStreamJob
  * @typedef {InternalJobWith<"elm-pages-internal://start-spinner", unknown>} InternalStartSpinnerJob
  * @typedef {InternalJobWith<"elm-pages-internal://stop-spinner", unknown>} InternalStopSpinnerJob
  *
@@ -711,7 +711,7 @@ async function runReadKey(req) {
 
 /**
  * @param {InternalStreamJob} req
- * @param {{ [x: string]: (arg0: any, arg1: { cwd: string; quiet: boolean; env: object; }) => any; }} portsFile
+ * @param {{ [x: string]: (arg0: unknown, arg1: { cwd: string; quiet: boolean; env: object; }) => unknown; }} portsFile
  */
 function runStream(req, portsFile) {
   return new Promise(async (resolve) => {
