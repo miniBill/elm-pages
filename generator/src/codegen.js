@@ -284,38 +284,40 @@ async function runElmReviewCommand(cwdPath, configPath, lamderaPath, applyFixes)
   return new Promise((resolve, reject) => {
     const child = spawnCallback("elm-review", args, { cwd: cwdPath });
 
-    let output = "";
+    let stdout = "";
+    let stderr = "";
 
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", function (/** @type {string} */ data) {
-      output += data.toString();
+      stdout += data.toString();
     });
 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", function (/** @type {string} */ data) {
-      output += data.toString();
+      stderr += data.toString();
     });
     child.on("error", function () {
-      reject(output);
+      reject(stdout + stderr);
     });
 
     child.on("close", function (code) {
       if (code === 0 || !applyFixes) {
         // For analysis-only run, exit code 1 is expected (errors found)
-        resolve(output);
+        resolve(stdout);
       } else {
         // When applying fixes, elm-review returns non-zero if there are errors,
         // but this is expected when fixes are already applied ("failing fix").
         // We only reject on actual compilation/parsing errors, not just failing fixes.
         // Check if the output indicates a real error vs just failing fixes
-        const hasRealError = output.includes("PARSING ERROR") ||
-                             output.includes("COMPILE ERROR") ||
-                             output.includes("CONFIGURATION ERROR");
+        const combined = stdout + stderr;
+        const hasRealError = combined.includes("PARSING ERROR") ||
+                             combined.includes("COMPILE ERROR") ||
+                             combined.includes("CONFIGURATION ERROR");
         if (hasRealError) {
-          reject(output);
+          reject(combined);
         } else {
           // Treat "(failing fix)" as success - the code is already in the desired state
-          resolve(output);
+          resolve(stdout);
         }
       }
     });
