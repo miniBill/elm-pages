@@ -298,7 +298,10 @@ export async function runElmReviewCodemod(cwd, target = "client") {
   }
 
   // Now run elm-review with fixes
-  await runElmReviewCommand(cwdPath, configPath, lamderaPath, true);
+  const fixOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, true);
+  if (target === "server") {
+    console.log(`[elm-pages] Server codemod fix-application exit output (first 1000 chars): ${fixOutput.slice(0, 1000)}`);
+  }
 
   return { ephemeralFields, deOptimizationCount };
 }
@@ -396,7 +399,12 @@ async function runElmReviewCommand(cwdPath, configPath, lamderaPath, applyFixes)
           reject(combined);
         } else {
           // Treat "(failing fix)" as success - the code is already in the desired state
-          resolve(stdout);
+          // Include exit code and stderr in output for diagnostics
+          if (stderr) {
+            resolve(stdout + "\n[elm-review stderr, exit code " + code + "]: " + stderr);
+          } else {
+            resolve(stdout);
+          }
         }
       }
     });
