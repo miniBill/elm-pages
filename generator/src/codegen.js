@@ -277,8 +277,15 @@ export async function runElmReviewCodemod(cwd, target = "client") {
   try {
     elmFormatPath = await which("elm-format");
   } catch (e) {
-    // elm-format not found — will be logged if fix application fails
-    elmFormatPath = null;
+    // which() didn't find it on PATH — check node_modules/.bin/ as fallback
+    // (elm-tooling installs here, but it may not be on PATH in all environments)
+    const localPath = path.join(process.cwd(), "node_modules", ".bin", "elm-format");
+    try {
+      await fs.promises.access(localPath, fs.constants.X_OK);
+      elmFormatPath = localPath;
+    } catch (e2) {
+      elmFormatPath = null;
+    }
   }
 
   // Run elm-review without fixes first to capture EPHEMERAL_FIELDS_JSON for analysis
