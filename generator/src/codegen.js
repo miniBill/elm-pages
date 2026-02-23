@@ -294,14 +294,13 @@ export async function runElmReviewCodemod(cwd, target = "client") {
   const deOptimizationCount = parseDeOptimizationCount(analysisOutput);
 
   // Now run elm-review with fixes
-  let fixOutput;
   try {
-    fixOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, true);
+    await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, true);
   } catch (e) {
-    throw new Error(
-      `[elm-pages] elm-review codemod failed during fix application (${target}).\n` +
-      `This is usually caused by a missing tool (e.g., elm-format) or a configuration error.\n` +
-      `Output: ${String(e).slice(0, 2000)}`
+    console.log(
+      `[elm-pages] WARNING: elm-review codemod failed during fix application (${target}). ` +
+      `The Ephemeral type optimization will be skipped.\n` +
+      `Output: ${String(e).slice(0, 500)}`
     );
   }
 
