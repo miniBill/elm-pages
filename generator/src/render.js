@@ -520,8 +520,8 @@ function bytesResponse(request, buffer) {
  * @typedef {InternalJobWith<"elm-pages-internal://readKey", unknown>} InternalReadKeyJob
  * @typedef {InternalJobWith<"elm-pages-internal://shell", [{captureOutput: boolean; commands: ElmCommand[]}]>} InternalShellJob
  * @typedef {InternalJobWith<"elm-pages-internal://stream", [{ kind: string; parts: StreamPart[]}]>} InternalStreamJob
- * @typedef {InternalJobWith<"elm-pages-internal://start-spinner", unknown>} InternalStartSpinnerJob
- * @typedef {InternalJobWith<"elm-pages-internal://stop-spinner", unknown>} InternalStopSpinnerJob
+ * @typedef {InternalJobWith<"elm-pages-internal://start-spinner", [{ text: string; immediateStart: boolean; spinnerId?: string; spinner?: string; }]>} InternalStartSpinnerJob
+ * @typedef {InternalJobWith<"elm-pages-internal://stop-spinner", [{ spinnerId: string; completionFn: string; completionText: string | null; }]>} InternalStopSpinnerJob
  *
  *
  * @typedef {InternalLogJob | InternalEnvJob | InternalReadFileJob | InternalReadFileBinaryJob | InternalGlobJob | InternalRandomSeedJob | InternalNowJob | InternalEncryptJob | InternalDecryptJob |InternalWriteFileJob | InternalSleepJob| InternalWhichJob | InternalQuestionJob | InternalReadKeyJob | InternalShellJob | InternalStreamJob | InternalStartSpinnerJob | InternalStopSpinnerJob} InternalJob
@@ -1251,6 +1251,9 @@ async function runWriteFileJob(req) {
   }
 }
 
+/**
+ * @param {InternalStartSpinnerJob} req
+ */
 function runStartSpinner(req) {
   const data = req.body.args[0];
   let spinnerId;
@@ -1268,6 +1271,9 @@ function runStartSpinner(req) {
   return jsonResponse(req, spinnerId);
 }
 
+/**
+ * @param {InternalStopSpinnerJob} req
+ */
 function runStopSpinner(req) {
   const data = req.body.args[0];
   const { spinnerId, completionText, completionFn } = data;
