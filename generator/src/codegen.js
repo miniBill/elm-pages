@@ -133,6 +133,45 @@ export async function generateClientFolder(basePath) {
 }
 
 /**
+ * Scan route files to find which ones actually contain `type alias Ephemeral`.
+ * This is the ground truth — regardless of what elm-review's analysis reported,
+ * we only reference Ephemeral in Main.elm if it actually exists in the file.
+ * @param {string} routeDir - path to the Route directory (e.g., "./elm-stuff/elm-pages/server/app/Route")
+ * @returns {Promise<string[]>} - module names like "Route.Index", "Route.Page_"
+ */
+async function verifyEphemeralTypesExist(routeDir) {
+  const result = [];
+
+  async function scanDir(dir, modulePrefix) {
+    let entries;
+    try {
+      entries = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch (e) {
+      return;
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await scanDir(fullPath, modulePrefix + entry.name + ".");
+      } else if (entry.name.endsWith(".elm")) {
+        const moduleName = modulePrefix + entry.name.slice(0, -4);
+        try {
+          const content = await fs.promises.readFile(fullPath, "utf8");
+          if (content.includes("type alias Ephemeral")) {
+            result.push(moduleName);
+          }
+        } catch (e) {
+          // Skip unreadable files
+        }
+      }
+    }
+  }
+
+  await scanDir(routeDir, "Route.");
+  return result;
+}
+
+/**
  * Generate the server folder with server-specific codemods.
  * @param {string} basePath
  * @returns {Promise<{ephemeralFields: Map<string, Set<string>>}>}
@@ -192,10 +231,17 @@ export async function generateServerFolder(basePath) {
   // Must run before generateTemplateModuleConnector so Main.elm can reference Ephemeral
   const serverResult = await runElmReviewCodemod("./elm-stuff/elm-pages/server/", "server");
 
-  // Pass the codemod's ephemeral field analysis results directly to Main.elm generation.
-  // This ensures Main.elm only references Ephemeral types that the codemod actually created,
-  // rather than running a separate (potentially inconsistent) analysis on the project root.
-  const routesWithEphemeral = [...serverResult.ephemeralFields.keys()];
+  // Verify which route files ACTUALLY have the Ephemeral type after the codemod.
+  // Don't trust the analysis output alone — the fix-application step may fail silently.
+  // Only reference Ephemeral types in Main.elm if they actually exist in the files.
+  const routesWithEphemeral = await verifyEphemeralTypesExist(
+    "./elm-stuff/elm-pages/server/app/Route"
+  );
+  console.log(`[elm-pages] Server codemod: analysis found ${serverResult.ephemeralFields.size} routes with ephemeral fields, verified ${routesWithEphemeral.length} in files.`);
+  if (serverResult.ephemeralFields.size > 0 && routesWithEphemeral.length === 0) {
+    console.log(`[elm-pages]   WARNING: Analysis found ephemeral fields but files were not modified.`);
+    console.log(`[elm-pages]   The Ephemeral type optimization will be skipped.`);
+  }
   const cliCode = await generateTemplateModuleConnector(basePath, "cli", { routesWithEphemeral });
 
   // Write final generated Main.elm, Route.elm, Pages.elm (overwriting the temporary ones)
