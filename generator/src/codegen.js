@@ -260,10 +260,25 @@ export async function generateServerFolder(basePath) {
 }
 
 /**
- * @param {string} [ cwd ]
- * @param {"client" | "server"} [ target ] - which codemod config to use (default: client)
- * @returns {Promise<{ephemeralFields: Map<string, Set<string>>, deOptimizationCount: number}>}
+ * Resolve the path to elm-format, checking PATH then node_modules/.bin/.
+ * @returns {Promise<string|null>}
  */
+async function resolveElmFormat() {
+  try {
+    return await which("elm-format");
+  } catch (e) {
+    // Not on PATH — check node_modules/.bin/ as fallback
+    // (elm-tooling installs here, but it may not be on PATH in all environments)
+    const localPath = path.join(process.cwd(), "node_modules", ".bin", "elm-format");
+    try {
+      await fs.promises.access(localPath, fs.constants.X_OK);
+      return localPath;
+    } catch (e2) {
+      return null;
+    }
+  }
+}
+
 export async function runElmReviewCodemod(cwd, target = "client") {
   // Use different elm-review configs for client vs server transformations
   const configPath =
@@ -273,34 +288,21 @@ export async function runElmReviewCodemod(cwd, target = "client") {
 
   const cwdPath = path.join(process.cwd(), cwd || ".");
   const lamderaPath = await which("lamdera");
-  let elmFormatPath;
-  try {
-    elmFormatPath = await which("elm-format");
-  } catch (e) {
-    // which() didn't find it on PATH — check node_modules/.bin/ as fallback
-    // (elm-tooling installs here, but it may not be on PATH in all environments)
-    const localPath = path.join(process.cwd(), "node_modules", ".bin", "elm-format");
-    try {
-      await fs.promises.access(localPath, fs.constants.X_OK);
-      elmFormatPath = localPath;
-    } catch (e2) {
-      elmFormatPath = null;
-    }
-  }
+  const elmFormatPath = await resolveElmFormat();
 
-  // Run elm-review without fixes first to capture EPHEMERAL_FIELDS_JSON for analysis
+  // Run elm-review without fixes first to capture EPHEMERAL_FIELDS_JSON for analysis.
+  // This step does not require elm-format.
   const analysisOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, false);
   const ephemeralFields = parseEphemeralFieldsWithFields(analysisOutput);
   const deOptimizationCount = parseDeOptimizationCount(analysisOutput);
 
-  // Now run elm-review with fixes
-  try {
+  // Apply fixes. elm-review requires elm-format for this step.
+  if (elmFormatPath) {
     await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, true);
-  } catch (e) {
+  } else {
     console.log(
-      `[elm-pages] WARNING: elm-review codemod failed during fix application (${target}). ` +
-      `The Ephemeral type optimization will be skipped.\n` +
-      `Output: ${String(e).slice(0, 500)}`
+      `[elm-pages] elm-format not found. Skipping Ephemeral type optimization.\n` +
+      `Install elm-format (e.g., via elm-tooling) to enable this optimization.`
     );
   }
 
