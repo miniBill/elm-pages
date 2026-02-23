@@ -237,10 +237,8 @@ export async function generateServerFolder(basePath) {
   const routesWithEphemeral = await verifyEphemeralTypesExist(
     "./elm-stuff/elm-pages/server/app/Route"
   );
-  console.log(`[elm-pages] Server codemod: analysis found ${serverResult.ephemeralFields.size} routes with ephemeral fields, verified ${routesWithEphemeral.length} in files.`);
   if (serverResult.ephemeralFields.size > 0 && routesWithEphemeral.length === 0) {
-    console.log(`[elm-pages]   WARNING: Analysis found ephemeral fields but files were not modified.`);
-    console.log(`[elm-pages]   The Ephemeral type optimization will be skipped.`);
+    console.log(`[elm-pages] WARNING: elm-review analysis found ${serverResult.ephemeralFields.size} routes with ephemeral fields, but no Ephemeral types were found in the output files. The Ephemeral type optimization will be skipped.`);
   }
   const cliCode = await generateTemplateModuleConnector(basePath, "cli", { routesWithEphemeral });
 
@@ -288,26 +286,16 @@ export async function runElmReviewCodemod(cwd, target = "client") {
   const ephemeralFields = parseEphemeralFieldsWithFields(analysisOutput);
   const deOptimizationCount = parseDeOptimizationCount(analysisOutput);
 
-  if (target === "server" && ephemeralFields.size === 0) {
-    // Log diagnostic info when server codemod analysis finds no ephemeral fields.
-    // This helps debug issues where elm-review fails silently (e.g., compilation errors).
-    let parsedOutput;
-    try { parsedOutput = JSON.parse(analysisOutput); } catch (e) { parsedOutput = null; }
-    console.log(`[elm-pages] Server codemod analysis found no ephemeral fields.`);
-    console.log(`[elm-pages]   cwd: ${cwdPath}`);
-    console.log(`[elm-pages]   config: ${configPath}`);
-    console.log(`[elm-pages]   output parseable: ${parsedOutput !== null}`);
-    if (parsedOutput === null) {
-      console.log(`[elm-pages]   raw output (first 500 chars): ${analysisOutput.slice(0, 500)}`);
-    } else {
-      console.log(`[elm-pages]   error count: ${parsedOutput.errors ? parsedOutput.errors.length : 0}`);
-    }
-  }
-
   // Now run elm-review with fixes
-  const fixOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, true);
-  if (target === "server") {
-    console.log(`[elm-pages] Server codemod fix-application exit output (first 1000 chars): ${fixOutput.slice(0, 1000)}`);
+  let fixOutput;
+  try {
+    fixOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, true);
+  } catch (e) {
+    throw new Error(
+      `[elm-pages] elm-review codemod failed during fix application (${target}).\n` +
+      `This is usually caused by a missing tool (e.g., elm-format) or a configuration error.\n` +
+      `Output: ${String(e).slice(0, 2000)}`
+    );
   }
 
   return { ephemeralFields, deOptimizationCount };
@@ -397,24 +385,24 @@ async function runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPa
         // For analysis-only run, exit code 1 is expected (errors found)
         resolve(stdout);
       } else {
-        // When applying fixes, elm-review returns non-zero if there are errors,
-        // but this is expected when fixes are already applied ("failing fix").
-        // We only reject on actual compilation/parsing errors, not just failing fixes.
-        // Check if the output indicates a real error vs just failing fixes
-        const combined = stdout + stderr;
-        const hasRealError = combined.includes("PARSING ERROR") ||
-                             combined.includes("COMPILE ERROR") ||
-                             combined.includes("CONFIGURATION ERROR");
-        if (hasRealError) {
-          reject(combined);
+        // Non-zero exit during fix application. Check if it's a real elm-review
+        // error (type: "error") or just a benign failing fix (type: "review-errors").
+        let isRealError = false;
+        try {
+          const parsed = JSON.parse(stdout);
+          // elm-review uses type: "error" for tool-level failures
+          // (e.g., ELM-FORMAT NOT FOUND, CONFIGURATION ERROR)
+          // and type: "review-errors" for rule results (including failing fixes).
+          isRealError = parsed.type === "error";
+        } catch (e) {
+          // Couldn't parse JSON — treat unparseable output as a real error
+          isRealError = true;
+        }
+        if (isRealError) {
+          reject(stdout + stderr);
         } else {
-          // Treat "(failing fix)" as success - the code is already in the desired state
-          // Include exit code and stderr in output for diagnostics
-          if (stderr) {
-            resolve(stdout + "\n[elm-review stderr, exit code " + code + "]: " + stderr);
-          } else {
-            resolve(stdout);
-          }
+          // Benign: fix already applied or no fixes needed
+          resolve(stdout);
         }
       }
     });
