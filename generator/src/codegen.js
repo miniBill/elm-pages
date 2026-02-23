@@ -192,8 +192,11 @@ export async function generateServerFolder(basePath) {
   // Must run before generateTemplateModuleConnector so Main.elm can reference Ephemeral
   const serverResult = await runElmReviewCodemod("./elm-stuff/elm-pages/server/", "server");
 
-  // Now generate the final CLI-phase Main.elm which references Route.Index.Ephemeral etc.
-  const cliCode = await generateTemplateModuleConnector(basePath, "cli");
+  // Pass the codemod's ephemeral field analysis results directly to Main.elm generation.
+  // This ensures Main.elm only references Ephemeral types that the codemod actually created,
+  // rather than running a separate (potentially inconsistent) analysis on the project root.
+  const routesWithEphemeral = [...serverResult.ephemeralFields.keys()];
+  const cliCode = await generateTemplateModuleConnector(basePath, "cli", { routesWithEphemeral });
 
   // Write final generated Main.elm, Route.elm, Pages.elm (overwriting the temporary ones)
   await writeFileIfChanged(
@@ -231,6 +234,22 @@ export async function runElmReviewCodemod(cwd, target = "client") {
   const analysisOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, false);
   const ephemeralFields = parseEphemeralFieldsWithFields(analysisOutput);
   const deOptimizationCount = parseDeOptimizationCount(analysisOutput);
+
+  if (target === "server" && ephemeralFields.size === 0) {
+    // Log diagnostic info when server codemod analysis finds no ephemeral fields.
+    // This helps debug issues where elm-review fails silently (e.g., compilation errors).
+    let parsedOutput;
+    try { parsedOutput = JSON.parse(analysisOutput); } catch (e) { parsedOutput = null; }
+    console.log(`[elm-pages] Server codemod analysis found no ephemeral fields.`);
+    console.log(`[elm-pages]   cwd: ${cwdPath}`);
+    console.log(`[elm-pages]   config: ${configPath}`);
+    console.log(`[elm-pages]   output parseable: ${parsedOutput !== null}`);
+    if (parsedOutput === null) {
+      console.log(`[elm-pages]   raw output (first 500 chars): ${analysisOutput.slice(0, 500)}`);
+    } else {
+      console.log(`[elm-pages]   error count: ${parsedOutput.errors ? parsedOutput.errors.length : 0}`);
+    }
+  }
 
   // Now run elm-review with fixes
   await runElmReviewCommand(cwdPath, configPath, lamderaPath, true);
