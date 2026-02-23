@@ -111,7 +111,10 @@ export async function generateClientFolder(basePath) {
   await newCopyBoth("SiteConfig.elm");
 
   await rewriteClientElmJson();
-  await copyDirIfNewer("./app", "./elm-stuff/elm-pages/client/app");
+  // Force-copy app files (not copyDirIfNewer) because the codemod modifies these files,
+  // making their mtime newer than the source. On subsequent builds, copyDirIfNewer would
+  // skip copying and the analysis would run on already-transformed files.
+  await fsExtra.copy("./app", "./elm-stuff/elm-pages/client/app", { overwrite: true });
 
   await writeFileIfChanged(
     "./elm-stuff/elm-pages/client/.elm-pages/Main.elm",
@@ -161,21 +164,38 @@ export async function generateServerFolder(basePath) {
     keepAppLocal: true,
   });
 
-  // Copy app files to server folder
-  await copyDirIfNewer("./app", "./elm-stuff/elm-pages/server/app");
+  // Force-copy app files (not copyDirIfNewer) because the codemod modifies these files,
+  // making their mtime newer than the source. On subsequent builds, copyDirIfNewer would
+  // skip copying and the analysis would run on already-transformed files.
+  await fsExtra.copy("./app", "./elm-stuff/elm-pages/server/app", { overwrite: true });
 
-  // Run server-specific elm-review codemod FIRST
+  // Generate temporary Route.elm, Pages.elm, and Fetcher modules BEFORE the codemod.
+  // elm-review needs to compile the project to set up ModuleNameLookupTable, and many
+  // app modules (Shared.elm, Route modules, etc.) import the generated Route module.
+  // Without these files, elm-review silently fails to apply Ephemeral type fixes.
+  const tempBrowserCode = await generateTemplateModuleConnector(basePath, "browser");
+  await writeFileIfChanged(
+    "./elm-stuff/elm-pages/server/.elm-pages/Route.elm",
+    tempBrowserCode.routesModule
+  );
+  await writeFileIfChanged(
+    "./elm-stuff/elm-pages/server/.elm-pages/Pages.elm",
+    elmPagesCliFile()
+  );
+  await writeFetcherModules(
+    "./elm-stuff/elm-pages/server/.elm-pages",
+    tempBrowserCode.fetcherModules
+  );
+
+  // Run server-specific elm-review codemod
   // This creates the Ephemeral type alias in Route files
   // Must run before generateTemplateModuleConnector so Main.elm can reference Ephemeral
   const serverResult = await runElmReviewCodemod("./elm-stuff/elm-pages/server/", "server");
 
-  // Now generate Main.elm which can reference Route.Index.Ephemeral etc.
+  // Now generate the final CLI-phase Main.elm which references Route.Index.Ephemeral etc.
   const cliCode = await generateTemplateModuleConnector(basePath, "cli");
 
-  // Generate browser code to get Fetcher modules (needed for route modules that import Fetchers)
-  const browserCode = await generateTemplateModuleConnector(basePath, "browser");
-
-  // Write generated Main.elm, Route.elm, Pages.elm
+  // Write final generated Main.elm, Route.elm, Pages.elm (overwriting the temporary ones)
   await writeFileIfChanged(
     "./elm-stuff/elm-pages/server/.elm-pages/Main.elm",
     cliCode.mainModule
@@ -187,12 +207,6 @@ export async function generateServerFolder(basePath) {
   await writeFileIfChanged(
     "./elm-stuff/elm-pages/server/.elm-pages/Pages.elm",
     elmPagesCliFile()
-  );
-
-  // Write Fetcher modules to server folder (needed for route modules that import Fetchers)
-  await writeFetcherModules(
-    "./elm-stuff/elm-pages/server/.elm-pages",
-    browserCode.fetcherModules
   );
 
   return { ephemeralFields: serverResult.ephemeralFields };
