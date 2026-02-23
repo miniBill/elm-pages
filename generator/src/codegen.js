@@ -275,9 +275,16 @@ export async function runElmReviewCodemod(cwd, target = "client") {
 
   const cwdPath = path.join(process.cwd(), cwd || ".");
   const lamderaPath = await which("lamdera");
+  let elmFormatPath;
+  try {
+    elmFormatPath = await which("elm-format");
+  } catch (e) {
+    // elm-format not found — will be logged if fix application fails
+    elmFormatPath = null;
+  }
 
   // Run elm-review without fixes first to capture EPHEMERAL_FIELDS_JSON for analysis
-  const analysisOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, false);
+  const analysisOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, false);
   const ephemeralFields = parseEphemeralFieldsWithFields(analysisOutput);
   const deOptimizationCount = parseDeOptimizationCount(analysisOutput);
 
@@ -298,7 +305,7 @@ export async function runElmReviewCodemod(cwd, target = "client") {
   }
 
   // Now run elm-review with fixes
-  const fixOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, true);
+  const fixOutput = await runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, true);
   if (target === "server") {
     console.log(`[elm-pages] Server codemod fix-application exit output (first 1000 chars): ${fixOutput.slice(0, 1000)}`);
   }
@@ -351,7 +358,7 @@ export function parseDeOptimizationCount(elmReviewOutput) {
  * @param {string} lamderaPath
  * @param {boolean} applyFixes
  */
-async function runElmReviewCommand(cwdPath, configPath, lamderaPath, applyFixes) {
+async function runElmReviewCommand(cwdPath, configPath, lamderaPath, elmFormatPath, applyFixes) {
   const args = [
     "--report", "json",
     "--namespace", "elm-pages",
@@ -359,6 +366,9 @@ async function runElmReviewCommand(cwdPath, configPath, lamderaPath, applyFixes)
     "--elmjson", "elm.json",
     "--compiler", lamderaPath,
   ];
+  if (elmFormatPath) {
+    args.push("--elm-format-path", elmFormatPath);
+  }
   if (applyFixes) {
     args.unshift("--fix-all-without-prompt");
   }
