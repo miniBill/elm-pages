@@ -46,6 +46,10 @@ process.on("unhandledRejection", (error) => {
 let foundErrors;
 
 /**
+ * @typedef {{ [x: string]: (arg0: unknown, arg1: { cwd: string; quiet: boolean; env: NodeJS.ProcessEnv; }) => unknown; }} PortsFile
+ */
+
+/**
  * @param {string} basePath
  * @param {unknown} elmModule
  * @param {string} path
@@ -53,7 +57,7 @@ let foundErrors;
  * @param {(pattern: string) => void} addBackendTaskWatcher
  * @param {boolean} hasFsAccess
  * @returns
- * @param {unknown} portsFile
+ * @param {PortsFile} portsFile
  * @param {string} mode
  */
 export async function render(
@@ -88,7 +92,7 @@ export async function render(
  * @param {unknown} elmModule
  * @returns
  * @param {string[]} cliOptions
- * @param {unknown} portsFile
+ * @param {PortsFile} portsFile
  * @param {string} scriptModuleName
  * @param {string} versionMessage
  */
@@ -123,6 +127,7 @@ export async function runGenerator(
     console.log(restoreColorSafe(error));
   }
 }
+
 /**
  * @param {string} basePath
  * @param {unknown} elmModule
@@ -130,7 +135,7 @@ export async function runGenerator(
  * @param {string} mode
  * @returns {Promise<({is404: boolean;} & ({kind: 'json';contentJson: string;} | {kind: 'html';htmlString: string;} | {kind: 'api-response';body: string;}))>}
  * @param {string[]} cliOptions
- * @param {unknown} portsFile
+ * @param {PortsFile} portsFile
  * @param {typeof import("fs") | import("memfs").IFs} fs
  * @param {string} scriptModuleName
  * @param {string} versionMessage
@@ -178,11 +183,10 @@ function runGeneratorAppHelp(
       // delete require.cache[require.resolve(compiledElmPath)];
     };
 
-    async function portHandler(/** @type { FromElm }  */ newThing) {
-      let fromElm;
+    async function portHandler(/** @type { FromElm } */ newThing) {
+      let fromElm = newThing;
       let contentDatPayload;
 
-      fromElm = newThing;
       if (fromElm.command === "log") {
         console.log(fromElm.value);
       } else if (fromElm.tag === "ApiResponse") {
@@ -261,8 +265,8 @@ function runGeneratorAppHelp(
  * @param {string} pagePath
  * @param {string} mode
  * @param {{ method: string; hostname: string; query: string; headers: unknown; host: string; pathname: string; port: string; protocol: string; rawUrl: string; }} request
- * @param {Set<string>} addBackendTaskWatcher
- * @param {unknown} portsFile
+ * @param {(task : string) => void} addBackendTaskWatcher
+ * @param {PortsFile} portsFile
  * @returns {Promise<({is404: boolean} & ( { kind: 'json'; contentJson: string} | { kind: 'html'; htmlString: string } | { kind: 'api-response'; body: string; }) )>}
  */
 function runElmApp(
@@ -395,15 +399,11 @@ function runElmApp(
 }
 /**
  * @param {string} basePath
- * @param {PageProgress} fromElm
+ * @param {FromElmPageProgress} fromElm
  * @param {boolean} isDevServer
+ * @param {unknown} contentDatPayload
  */
-async function outputString(
-  basePath,
-  /** @type { PageProgress } */ fromElm,
-  isDevServer,
-  contentDatPayload
-) {
+async function outputString(basePath, fromElm, isDevServer, contentDatPayload) {
   const args = fromElm.args[0];
   let contentJson = {};
   contentJson["staticData"] = args.contentJson;
@@ -425,15 +425,31 @@ async function outputString(
   };
 }
 
-/** @typedef { { route : string; contentJson : string; head : SeoTag[]; html: string; } } FromElm */
-/** @typedef {HeadTag | JsonLdTag} SeoTag */
-/** @typedef {{ name: string; attributes: string[][]; type: 'head' }} HeadTag */
-/** @typedef {{ contents: unknown; type: 'json-ld' }} JsonLdTag */
+/**
+ * @typedef {{ command: "log"; value: any; }} FromElmLog
+ *
+ * @typedef {{ tag: "ApiResponse" }} FromElmApiResponse
+ *
+ * @typedef {{ name: string; attributes: string[][]; type: 'head' }} HeadTag
+ * @typedef {{ contents: unknown; type: 'json-ld' }} JsonLdTag
+ * @typedef {HeadTag | JsonLdTag} SeoTag
+ * @typedef {{ head: SeoTag[]; errors: unknown[]; contentJson: string; html: string; route: string; title: string; is404: unknown; statusCode: unknown; headers: unknown[]; }} Arg
+ * @typedef {{ tag: "PageProgress"; args: Arg[] }} FromElmPageProgress
+ *
+ * @typedef {{ oldThing: FromElmNew; binaryPageData: unknown; }} FromElmOldThing
+ *
+ * @typedef {FromElmLog | FromElmApiResponse | FromElmPageProgress} FromElmNew
+ * @typedef {FromElmNew | FromElmOldThing} FromElm
+ */
 
-/** @typedef { { tag : 'PageProgress'; args : Arg[] } } PageProgress */
-
-/** @typedef { { head: unknown[]; errors: unknown[]; contentJson: unknown[]; html: string; route: string; title: string; } } Arg */
-
+/**
+ *
+ * @param {unknown} requestHash
+ * @param {PortsFile} portsFile
+ * @param {string} mode
+ * @param {{ url: string; headers: { [x: string]: string; }; method: string; body: import("./request-cache.js").Body; quiet: boolean; }} requestToPerform
+ * @returns
+ */
 async function runHttpJob(requestHash, portsFile, mode, requestToPerform) {
   try {
     const lookupResponse = await lookupOrPerform(
@@ -534,7 +550,7 @@ function bytesResponse(request, buffer) {
  * @param {unknown} requestHash
  * @param {unknown} app
  * @param {Set<string>} patternsToWatch
- * @param {unknown} portsFile
+ * @param {PortsFile} portsFile
  * @param {InternalJob} requestToPerform
  */
 async function runInternalJob(
@@ -713,7 +729,7 @@ async function runReadKey(req) {
 
 /**
  * @param {InternalStreamJob} req
- * @param {{ [x: string]: (arg0: unknown, arg1: { cwd: string; quiet: boolean; env: object; }) => unknown; }} portsFile
+ * @param {PortsFile} portsFile
  */
 function runStream(req, portsFile) {
   return new Promise(async (resolve) => {
@@ -823,7 +839,7 @@ function runStream(req, portsFile) {
  * @param {?import('node:stream').Stream} lastStream
  * @param {StreamPart} part
  * @param {{ cwd: string; quiet: boolean; env: NodeJS.ProcessEnv; }} param2
- * @param {{ [x: string]: (arg0: unknown, arg1: { cwd: string; quiet: boolean; env: NodeJS.ProcessEnv; }) => unknown; }} portsFile
+ * @param {PortsFile} portsFile
  * @param {((value: unknown) => void) | ((arg0: { error: unknown; }) => void) } resolve
  * @param {boolean} isLastProcess
  * @param {string} kind
