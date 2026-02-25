@@ -47,7 +47,7 @@ let foundErrors;
 
 /**
  * @param {string} basePath
- * @param {Object} elmModule
+ * @param {unknown} elmModule
  * @param {string} path
  * @param {{method: string;hostname: string;query: Record<string, string | undefined>;headers: Record<string, string>;host: string;pathname: string;port: number | null;protocol: string;rawUrl: string;}} request
  * @param {(pattern: string) => void} addBackendTaskWatcher
@@ -85,7 +85,7 @@ export async function render(
 }
 
 /**
- * @param {Object} elmModule
+ * @param {unknown} elmModule
  * @returns
  * @param {string[]} cliOptions
  * @param {unknown} portsFile
@@ -125,7 +125,7 @@ export async function runGenerator(
 }
 /**
  * @param {string} basePath
- * @param {Object} elmModule
+ * @param {unknown} elmModule
  * @param {string} pagePath
  * @param {string} mode
  * @returns {Promise<({is404: boolean;} & ({kind: 'json';contentJson: string;} | {kind: 'html';htmlString: string;} | {kind: 'api-response';body: string;}))>}
@@ -146,6 +146,7 @@ function runGeneratorAppHelp(
   versionMessage
 ) {
   const isDevServer = mode !== "build";
+  /** @type {Set<string>} */
   let patternsToWatch = new Set();
   let app = null;
   let killApp;
@@ -256,11 +257,12 @@ function runGeneratorAppHelp(
 
 /**
  * @param {string} basePath
- * @param {Object} elmModule
+ * @param {unknown} elmModule
  * @param {string} pagePath
  * @param {string} mode
- * @param {{ method: string; hostname: string; query: string; headers: Object; host: string; pathname: string; port: string; protocol: string; rawUrl: string; }} request
- * @param {(pattern: string) => void} addBackendTaskWatcher
+ * @param {{ method: string; hostname: string; query: string; headers: unknown; host: string; pathname: string; port: string; protocol: string; rawUrl: string; }} request
+ * @param {Set<string>} addBackendTaskWatcher
+ * @param {unknown} portsFile
  * @returns {Promise<({is404: boolean} & ( { kind: 'json'; contentJson: string} | { kind: 'html'; htmlString: string } | { kind: 'api-response'; body: string; }) )>}
  */
 function runElmApp(
@@ -273,6 +275,7 @@ function runElmApp(
   addBackendTaskWatcher
 ) {
   const isDevServer = mode !== "build";
+  /** @type {Set<string>} */
   let patternsToWatch = new Set();
   let app = null;
   let killApp;
@@ -425,7 +428,7 @@ async function outputString(
 /** @typedef { { route : string; contentJson : string; head : SeoTag[]; html: string; } } FromElm */
 /** @typedef {HeadTag | JsonLdTag} SeoTag */
 /** @typedef {{ name: string; attributes: string[][]; type: 'head' }} HeadTag */
-/** @typedef {{ contents: Object; type: 'json-ld' }} JsonLdTag */
+/** @typedef {{ contents: unknown; type: 'json-ld' }} JsonLdTag */
 
 /** @typedef { { tag : 'PageProgress'; args : Arg[] } } PageProgress */
 
@@ -530,7 +533,7 @@ function bytesResponse(request, buffer) {
 /**
  * @param {unknown} requestHash
  * @param {unknown} app
- * @param {{ add(pattern: string): void; }} patternsToWatch
+ * @param {Set<string>} patternsToWatch
  * @param {unknown} portsFile
  * @param {InternalJob} requestToPerform
  */
@@ -616,7 +619,7 @@ function getContext(requestToPerform) {
 /**
  *
  * @param {InternalReadFileJob} req
- * @param {{add(pattern: string): void}} patternsToWatch
+ * @param {Set<string>} patternsToWatch
  * @returns
  */
 async function readFileJobNew(req, patternsToWatch) {
@@ -644,7 +647,7 @@ async function readFileJobNew(req, patternsToWatch) {
 
 /**
  * @param {InternalReadFileBinaryJob} req
- * @param {{ add: (arg0: string) => void; }} patternsToWatch
+ * @param {Set<string>} patternsToWatch
  */
 async function readFileBinaryJobNew(req, patternsToWatch) {
   const filePath = req.body.args[1];
@@ -1291,7 +1294,7 @@ function runStopSpinner(req) {
 
 /**
  * @param {InternalGlobJob} req
- * @param {{ add: (arg0: unknown) => void; }} patternsToWatch
+ * @param {Set<string>} patternsToWatch
  */
 async function runGlobNew(req, patternsToWatch) {
   try {
