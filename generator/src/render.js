@@ -53,7 +53,7 @@ let foundErrors;
  * @param {(pattern: string) => void} addBackendTaskWatcher
  * @param {boolean} hasFsAccess
  * @returns
- * @param {any} portsFile
+ * @param {unknown} portsFile
  * @param {string} mode
  */
 export async function render(
@@ -88,7 +88,7 @@ export async function render(
  * @param {Object} elmModule
  * @returns
  * @param {string[]} cliOptions
- * @param {any} portsFile
+ * @param {unknown} portsFile
  * @param {string} scriptModuleName
  * @param {string} versionMessage
  */
@@ -130,7 +130,7 @@ export async function runGenerator(
  * @param {string} mode
  * @returns {Promise<({is404: boolean;} & ({kind: 'json';contentJson: string;} | {kind: 'html';htmlString: string;} | {kind: 'api-response';body: string;}))>}
  * @param {string[]} cliOptions
- * @param {any} portsFile
+ * @param {unknown} portsFile
  * @param {typeof import("fs") | import("memfs").IFs} fs
  * @param {string} scriptModuleName
  * @param {string} versionMessage
@@ -429,7 +429,7 @@ async function outputString(
 
 /** @typedef { { tag : 'PageProgress'; args : Arg[] } } PageProgress */
 
-/** @typedef { { head: any[]; errors: any[]; contentJson: any[]; html: string; route: string; title: string; } } Arg */
+/** @typedef { { head: unknown[]; errors: unknown[]; contentJson: unknown[]; html: string; route: string; title: string; } } Arg */
 
 async function runHttpJob(requestHash, portsFile, mode, requestToPerform) {
   try {
@@ -801,9 +801,9 @@ function runStream(req, portsFile) {
  * @typedef {StreamPartWith<"httpWrite", { url: string; method: string; headers: { key: string; value: string; }[]; body?: StaticHttpBody; retries: number?; timeoutInMs: number?; }>} HttpWritePart
  * @typedef {StreamPartWith<"fileRead", { path: string; }>} FileReadPart
  * @typedef {StreamPartWith<"fileWrite", { path: string; }>} FileWritePart
- * @typedef {StreamPartWith<"customRead", { portName: string; input: any; }>} CustomReadPart
- * @typedef {StreamPartWith<"customWrite", { portName: string; input: any; }>} CustomWritePart
- * @typedef {StreamPartWith<"customDuplex", { portName: string; input: any; }>} CustomDuplexPart
+ * @typedef {StreamPartWith<"customRead", { portName: string; input: unknown; }>} CustomReadPart
+ * @typedef {StreamPartWith<"customWrite", { portName: string; input: unknown; }>} CustomWritePart
+ * @typedef {StreamPartWith<"customDuplex", { portName: string; input: unknown; }>} CustomDuplexPart
  */
 
 /**
@@ -821,11 +821,11 @@ function runStream(req, portsFile) {
  * @param {?import('node:stream').Stream} lastStream
  * @param {StreamPart} part
  * @param {{ cwd: string; quiet: boolean; env: NodeJS.ProcessEnv; }} param2
- * @param {{ [x: string]: (arg0: any, arg1: { cwd: string; quiet: boolean; env: NodeJS.ProcessEnv; }) => any; }} portsFile
- * @param {((value: any) => void) | ((arg0: { error: any; }) => void) } resolve
+ * @param {{ [x: string]: (arg0: unknown, arg1: { cwd: string; quiet: boolean; env: NodeJS.ProcessEnv; }) => unknown; }} portsFile
+ * @param {((value: unknown) => void) | ((arg0: { error: unknown; }) => void) } resolve
  * @param {boolean} isLastProcess
  * @param {string} kind
- * @returns {Promise<{ stream: import('node:stream').Stream; metadata?: Promise<any> | (() => any); }>}
+ * @returns {Promise<{ stream: import('node:stream').Stream; metadata?: Promise<unknown> | (() => unknown); }>}
  */
 async function pipePartToStream(
   lastStream,
@@ -1152,7 +1152,9 @@ function stderr() {
 }
 
 /**
- * @param {Promise<any> | (() => Promise<any>) | null | undefined} func
+ * @template T
+ * @param {Promise<T> | (() => Promise<T>) | null | undefined} func
+ * @return {Promise<T | null | undefined>}
  */
 async function tryCallingFunction(func) {
   if (func) {
@@ -1290,7 +1292,7 @@ function runStopSpinner(req) {
 
 /**
  * @param {InternalGlobJob} req
- * @param {{ add: (arg0: any) => void; }} patternsToWatch
+ * @param {{ add: (arg0: unknown) => void; }} patternsToWatch
  */
 async function runGlobNew(req, patternsToWatch) {
   try {
@@ -1398,7 +1400,7 @@ async function runDecryptJob(req) {
 }
 
 /**
- * @param {{ ports: { fromJsPort: { send: (arg0: { tag: string; data: any; }) => void; }; }; }} app
+ * @param {{ ports: { fromJsPort: { send: (arg0: { tag: string; data: unknown; }) => void; }; }; }} app
  * @param {{ message: string; title: string; }} error
  */
 function sendError(app, error) {
