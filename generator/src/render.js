@@ -683,9 +683,11 @@ function dataViewToBuffer(dv) {
  * @typedef {InternalJobWith<"elm-pages-internal://stream", [{ kind: string; parts: StreamPart[]}]>} InternalStreamJob
  * @typedef {InternalJobWith<"elm-pages-internal://start-spinner", [{ text: string; immediateStart: boolean; spinnerId?: string; spinner?: string; }]>} InternalStartSpinnerJob
  * @typedef {InternalJobWith<"elm-pages-internal://stop-spinner", [{ spinnerId: string; completionFn: string; completionText: string | null; }]>} InternalStopSpinnerJob
+ * @typedef {InternalJobWith<"elm-pages-internal://timezone", [{ tzId: string; sinceMs: number; untilMs: number; }]>} InternalTimezoneJob
+ * @typedef {InternalJobWith<"elm-pages-internal://resolve-path", [string]>} InternalResolvePathJob
  *
  *
- * @typedef {InternalLogJob | InternalEnvJob | InternalReadFileJob | InternalReadFileBinaryJob | InternalGlobJob | InternalRandomSeedJob | InternalNowJob | InternalEncryptJob | InternalDecryptJob |InternalWriteFileJob | InternalSleepJob| InternalWhichJob | InternalQuestionJob | InternalReadKeyJob | InternalStreamJob | InternalStartSpinnerJob | InternalStopSpinnerJob} InternalJob
+ * @typedef {InternalLogJob | InternalEnvJob | InternalReadFileJob | InternalReadFileBinaryJob | InternalGlobJob | InternalRandomSeedJob | InternalNowJob | InternalEncryptJob | InternalDecryptJob |InternalWriteFileJob | InternalSleepJob| InternalWhichJob | InternalQuestionJob | InternalReadKeyJob | InternalStreamJob | InternalStartSpinnerJob | InternalStopSpinnerJob | InternalTimezoneJob | InternalResolvePathJob} InternalJob
  *
  */
 
@@ -2211,6 +2213,9 @@ async function runLogJob(req) {
   }
 }
 
+/**
+ * @param {InternalResolvePathJob} req
+ */
 function runResolvePath(req) {
   const filePath = req.body.args[0];
   const cwd = path.resolve(...req.dir);
@@ -2316,6 +2321,8 @@ const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000;
  * Accepts { sinceMs, untilMs } for the date range to scan for DST transitions.
  * Optionally accepts { tzId } for a named timezone; defaults to system timezone.
  * Returns { defaultOffset, eras } for Time.customZone.
+ * @param {InternalTimezoneJob} req
+ * @returns {{ defaultOffset: number; eras: { start: number; offset: number; }[]; }}
  */
 function runTimezone(req) {
   const body = req.body.args[0];
@@ -2407,6 +2414,10 @@ function binarySearchTransition(tzId, loMs, hiMs, offsetBefore) {
 /**
  * Get timezone transition data using the Intl API (scan + binary search).
  * Scans every 2 weeks to catch even rare mid-month transitions.
+ * @param {string} tzId
+ * @param {number} sinceMs
+ * @param {number} untilMs
+ * @returns {{ defaultOffset: number; eras: { start: number; offset: number; }[]; }}
  */
 function getTimezoneDataIntl(tzId, sinceMs, untilMs) {
   const defaultOffset = getOffsetMinutesIntl(tzId, sinceMs);
