@@ -69,6 +69,7 @@
     "@types/which": "^3.0.4",
     "cypress": "^15.13.0",
     "elm-codegen": "^0.6.3",
+    "elm-coverage": "^0.4.1",
     "elm-review": "^2.13.5",
     "elm-test": "^0.19.1-revision17",
     "elm-tooling": "^1.17.0",
