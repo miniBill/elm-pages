@@ -1,11 +1,14 @@
 module ExtractInternalApi exposing
     ( rule
-    , Body(..), extractCodec
+    , extractCodec, API, Body(..)
+    , apiToString
     )
 
 {-|
 
 @docs rule
+
+@docs extractCodec, API, Body
 
 -}
 
@@ -37,7 +40,20 @@ rule =
             , fromModuleToProject = fromModuleToProject
             , foldProjectContexts = foldProjectContexts
             }
-        |> Rule.withDataExtractor (Codec.encodeToValue extractCodec)
+        |> Rule.withDataExtractor
+            (\{ calls } ->
+                Dict.Extra.filterMap
+                    (\k v ->
+                        case v of
+                            Ok w ->
+                                Just w
+
+                            Err _ ->
+                                Nothing
+                    )
+                    calls
+                    |> Codec.encodeToValue extractCodec
+            )
         |> Rule.withFinalProjectEvaluation finalEvaluation
         |> Rule.fromProjectRuleSchema
 
@@ -57,22 +73,9 @@ finalEvaluation context =
             )
 
 
-extractCodec : Codec ProjectContext
+extractCodec : Codec (Dict String API)
 extractCodec =
     Codec.dict apiCodec
-        |> Codec.map (\calls -> { calls = Dict.map (\_ v -> Ok v) calls })
-            (\{ calls } ->
-                Dict.Extra.filterMap
-                    (\k v ->
-                        case v of
-                            Ok w ->
-                                Just w
-
-                            Err _ ->
-                                Nothing
-                    )
-                    calls
-            )
 
 
 apiCodec : Codec API
@@ -331,7 +334,10 @@ bodyToString body =
 
 apiToString : API -> String
 apiToString api =
-    Codec.encodeToString 0 apiCodec api
+    [ " - body: " ++ bodyToString api.body
+    , " - expect: " ++ typeToString_ api.expect
+    ]
+        |> String.join "\n"
 
 
 expressionVisitor : Node Expression -> ModuleContext -> ( List (Rule.Error {}), ModuleContext )
@@ -454,7 +460,13 @@ parseRequest range name body expect context =
                         _ ->
                             ( [ Rule.error
                                     { message = "Conflicting types"
-                                    , details = [ "Found " ++ apiToString new ++ " but I had already found " ++ apiToString existing ++ " elsewhere" ]
+                                    , details =
+                                        [ "Found"
+                                        , apiToString new
+                                        , "but I had already found"
+                                        , apiToString existing
+                                        , "elsewhere"
+                                        ]
                                     }
                                     range
                               ]
@@ -1091,10 +1103,10 @@ typeToString isInUnion t =
                                 map
                                     (\vs ->
                                         if o then
-                                            k ++ ": " ++ vs ++ ";"
+                                            k ++ ": " ++ vs ++ "; "
 
                                         else
-                                            k ++ "? : " ++ vs ++ ";"
+                                            k ++ "? : " ++ vs ++ "; "
                                     )
                                     v
                             )
@@ -1105,7 +1117,7 @@ typeToString isInUnion t =
                 ( "{}", dict )
 
             else
-                ( "{ " ++ inner ++ " }", dict )
+                ( "{ " ++ inner ++ "}", dict )
 
         UnitType ->
             ( "{}", Dict.empty )
