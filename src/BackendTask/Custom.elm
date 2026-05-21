@@ -146,130 +146,136 @@ run portName input decoder =
                 , ( "portName", Encode.string portName )
                 ]
                 |> BackendTask.Http.jsonBody
-        , expect =
-            Decode.field "elm-pages-internal-error" Decode.string
-                |> Decode.maybe
-                |> Decode.andThen
-                    (\maybeInternalErrorCode ->
-                        case maybeInternalErrorCode of
-                            Just errorKind ->
-                                (if errorKind == "CustomBackendTaskNotDefined" then
+        , expect = internalErrorDecoder portName decoder
+        }
+        |> BackendTask.andThen BackendTask.fromResult
+
+
+internalErrorDecoder : String -> Decoder value -> Decoder (Result { fatal : FatalError, recoverable : Error } value)
+internalErrorDecoder portName decoder =
+    Decode.field "elm-pages-internal-error" Decode.string
+        |> Decode.maybe
+        |> Decode.andThen
+            (\maybeInternalErrorCode ->
+                case maybeInternalErrorCode of
+                    Just "CustomBackendTaskNotDefined" ->
+                        FatalError.recoverable
+                            { title = "Custom BackendTask Error"
+                            , body =
+                                [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I expected to find a port named `"
+                                , TerminalText.yellow portName
+                                , TerminalText.text "` but I couldn't find it. Is the function exported in your custom-backend-task file?"
+                                ]
+                                    |> TerminalText.toString
+                            }
+                            (CustomBackendTaskNotDefined { name = portName })
+                            |> Err
+                            |> Decode.succeed
+
+                    Just "ExportIsNotFunction" ->
+                        Decode.field "error" Decode.string
+                            |> Decode.maybe
+                            |> Decode.map
+                                (\incorrectType ->
                                     FatalError.recoverable
                                         { title = "Custom BackendTask Error"
                                         , body =
-                                            [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I expected to find a port named `"
+                                            [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I found an export called `"
                                             , TerminalText.yellow portName
-                                            , TerminalText.text "` but I couldn't find it. Is the function exported in your custom-backend-task file?"
+                                            , TerminalText.text "` but I expected its type to be function, but instead its type was: "
+                                            , TerminalText.red (Maybe.withDefault "" incorrectType)
                                             ]
                                                 |> TerminalText.toString
                                         }
-                                        (CustomBackendTaskNotDefined { name = portName })
-                                        |> Decode.succeed
+                                        ExportIsNotFunction
+                                        |> Err
+                                )
 
-                                 else if errorKind == "ExportIsNotFunction" then
-                                    Decode.field "error" Decode.string
-                                        |> Decode.maybe
-                                        |> Decode.map (Maybe.withDefault "")
-                                        |> Decode.map
-                                            (\incorrectType ->
-                                                FatalError.recoverable
-                                                    { title = "Custom BackendTask Error"
-                                                    , body =
-                                                        [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I found an export called `"
-                                                        , TerminalText.yellow portName
-                                                        , TerminalText.text "` but I expected its type to be function, but instead its type was: "
-                                                        , TerminalText.red incorrectType
-                                                        ]
-                                                            |> TerminalText.toString
-                                                    }
-                                                    ExportIsNotFunction
-                                            )
+                    Just "MissingCustomBackendTaskFile" ->
+                        FatalError.recoverable
+                            { title = "Custom BackendTask Error"
+                            , body =
+                                [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I couldn't find your custom-backend-task file. Be sure to create a 'custom-backend-task.ts' or 'custom-backend-task.js' file."
+                                ]
+                                    |> TerminalText.toString
+                            }
+                            MissingCustomBackendTaskFile
+                            |> Err
+                            |> Decode.succeed
 
-                                 else if errorKind == "MissingCustomBackendTaskFile" then
+                    Just "ErrorInCustomBackendTaskFile" ->
+                        Decode.field "error" Decode.string
+                            |> Decode.maybe
+                            |> Decode.map
+                                (\errorMessage ->
                                     FatalError.recoverable
                                         { title = "Custom BackendTask Error"
                                         , body =
-                                            [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I couldn't find your custom-backend-task file. Be sure to create a 'custom-backend-task.ts' or 'custom-backend-task.js' file."
-                                            ]
-                                                |> TerminalText.toString
-                                        }
-                                        MissingCustomBackendTaskFile
-                                        |> Decode.succeed
-
-                                 else if errorKind == "ErrorInCustomBackendTaskFile" then
-                                    Decode.field "error" Decode.string
-                                        |> Decode.maybe
-                                        |> Decode.map (Maybe.withDefault "")
-                                        |> Decode.map
-                                            (\errorMessage ->
-                                                FatalError.recoverable
-                                                    { title = "Custom BackendTask Error"
-                                                    , body =
-                                                        [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I couldn't import the port definitions file, because of this exception:\n\n"
-                                                        , TerminalText.red errorMessage
-                                                        , TerminalText.text "\n\nAre there syntax errors or exceptions thrown during import?"
-                                                        ]
-                                                            |> TerminalText.toString
-                                                    }
-                                                    ErrorInCustomBackendTaskFile
-                                            )
-
-                                 else if errorKind == "CustomBackendTaskException" then
-                                    Decode.field "error" Decode.value
-                                        |> Decode.maybe
-                                        |> Decode.map (Maybe.withDefault Encode.null)
-                                        |> Decode.map
-                                            (\portCallError ->
-                                                FatalError.recoverable
-                                                    { title = "Custom BackendTask Error"
-                                                    , body =
-                                                        [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I was able to import the port definitions file, but when running it I encountered this exception:\n\n"
-                                                        , TerminalText.red (Encode.encode 2 portCallError)
-                                                        , TerminalText.text "\n\nYou could add a `try`/`catch` in your `custom-backend-task` JavaScript code to handle that error."
-                                                        ]
-                                                            |> TerminalText.toString
-                                                    }
-                                                    (CustomBackendTaskException portCallError)
-                                            )
-
-                                 else if errorKind == "NonJsonException" then
-                                    Decode.map2
-                                        (\exceptionMessage stackTrace ->
-                                            FatalError.recoverable
-                                                { title = "Custom BackendTask Error"
-                                                , body =
-                                                    [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I was able to import the port definitions file, but when running it I encountered this exception:\n\n"
-                                                    , TerminalText.red exceptionMessage
-                                                    , TerminalText.text ("\n\n" ++ (stackTrace |> Maybe.withDefault "\n"))
-                                                    , TerminalText.text "\n\nYou could add a `try`/`catch` in your `custom-backend-task` JavaScript code to handle that error."
-                                                    ]
-                                                        |> TerminalText.toString
-                                                }
-                                                (NonJsonException exceptionMessage)
-                                        )
-                                        (Decode.field "error" Decode.string)
-                                        (Decode.field "stack" (Decode.nullable Decode.string))
-
-                                 else
-                                    FatalError.recoverable
-                                        { title = "Custom BackendTask Error"
-                                        , body =
-                                            [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I expected to find a port named `"
-                                            , TerminalText.yellow portName
-                                            , TerminalText.text "`."
+                                            [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I couldn't import the port definitions file, because of this exception:\n\n"
+                                            , TerminalText.red (Maybe.withDefault "" errorMessage)
+                                            , TerminalText.text "\n\nAre there syntax errors or exceptions thrown during import?"
                                             ]
                                                 |> TerminalText.toString
                                         }
                                         ErrorInCustomBackendTaskFile
-                                        |> Decode.succeed
+                                        |> Err
                                 )
-                                    |> Decode.map Err
 
-                            Nothing ->
-                                decoder |> Decode.map Ok
-                    )
-        }
-        |> BackendTask.andThen BackendTask.fromResult
+                    Just "CustomBackendTaskException" ->
+                        Decode.field "error" Decode.value
+                            |> Decode.maybe
+                            |> Decode.map (Maybe.withDefault Encode.null)
+                            |> Decode.map
+                                (\portCallError ->
+                                    FatalError.recoverable
+                                        { title = "Custom BackendTask Error"
+                                        , body =
+                                            [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I was able to import the port definitions file, but when running it I encountered this exception:\n\n"
+                                            , TerminalText.red (Encode.encode 2 portCallError)
+                                            , TerminalText.text "\n\nYou could add a `try`/`catch` in your `custom-backend-task` JavaScript code to handle that error."
+                                            ]
+                                                |> TerminalText.toString
+                                        }
+                                        (CustomBackendTaskException portCallError)
+                                        |> Err
+                                )
+
+                    Just "NonJsonException" ->
+                        Decode.map2
+                            (\exceptionMessage stackTrace ->
+                                FatalError.recoverable
+                                    { title = "Custom BackendTask Error"
+                                    , body =
+                                        [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I was able to import the port definitions file, but when running it I encountered this exception:\n\n"
+                                        , TerminalText.red exceptionMessage
+                                        , TerminalText.text ("\n\n" ++ (stackTrace |> Maybe.withDefault "\n"))
+                                        , TerminalText.text "\n\nYou could add a `try`/`catch` in your `custom-backend-task` JavaScript code to handle that error."
+                                        ]
+                                            |> TerminalText.toString
+                                    }
+                                    (NonJsonException exceptionMessage)
+                                    |> Err
+                            )
+                            (Decode.field "error" Decode.string)
+                            (Decode.field "stack" (Decode.nullable Decode.string))
+
+                    Just _ ->
+                        FatalError.recoverable
+                            { title = "Custom BackendTask Error"
+                            , body =
+                                [ TerminalText.text "Something went wrong in a call to BackendTask.Custom.run. I expected to find a port named `"
+                                , TerminalText.yellow portName
+                                , TerminalText.text "`."
+                                ]
+                                    |> TerminalText.toString
+                            }
+                            ErrorInCustomBackendTaskFile
+                            |> Err
+                            |> Decode.succeed
+
+                    Nothing ->
+                        decoder |> Decode.map Ok
+            )
 
 
 {-| -}
@@ -321,5 +327,3 @@ dateDecoder =
                         Decode.fail <| "I was running BackendTask.Custom.dateDecoder and expecting an elm-pages normalized Object with kind \"Date\", but got kind \"" ++ kind ++ "\"."
                 )
         )
-
-

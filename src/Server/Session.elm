@@ -373,9 +373,7 @@ encodeSessionUpdate config toRequest sessionResult =
                             |> Server.Response.withSetCookieHeader
                                 (SetCookie.setCookie config.name encoded (config.options |> Maybe.withDefault SetCookie.options))
                     )
-                    (sign config.secrets
-                        (encodeNonExpiringPairs sessionUpdate)
-                    )
+                    (sign config.secrets sessionUpdate)
             )
 
 
@@ -404,8 +402,8 @@ unsignCookie config sessionCookie =
             )
 
 
-sign : BackendTask error (List String) -> Json.Encode.Value -> BackendTask error String
-sign getSecrets input =
+sign : BackendTask error (List String) -> Session -> BackendTask error String
+sign getSecrets session =
     getSecrets
         |> BackendTask.andThen
             (\secrets ->
@@ -414,7 +412,7 @@ sign getSecrets input =
                     , body =
                         BackendTask.Http.jsonBody
                             (Json.Encode.object
-                                [ ( "values", input )
+                                [ ( "values", encodeNonExpiringPairs session )
                                 , ( "secret"
                                   , Json.Encode.string
                                         (secrets
