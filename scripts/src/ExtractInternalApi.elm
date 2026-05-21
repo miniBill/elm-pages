@@ -326,7 +326,7 @@ bodyToString body =
             "<string>"
 
         JsonBody t ->
-            typeToString False t
+            typeToString_ t
 
 
 apiToString : API -> String
@@ -1013,9 +1013,9 @@ intersectTypes2 l r =
                                         "Field `"
                                             ++ k
                                             ++ "` has types `"
-                                            ++ typeToString False v1
+                                            ++ typeToString_ v1
                                             ++ "` and `"
-                                            ++ typeToString False v2
+                                            ++ typeToString_ v2
                                             ++ "`"
                                 in
                                 { message = "Incompatible types"
@@ -1040,90 +1040,122 @@ intersectTypes2 l r =
 
         _ ->
             { message = "intersectTypes2 - Missing branch"
-            , details = [ "Branch `" ++ typeToString False l ++ "` `" ++ typeToString False r ++ "` not implemented" ]
+            , details = [ "Branch `" ++ typeToString_ l ++ "` `" ++ typeToString_ r ++ "` not implemented" ]
             }
                 |> Err
 
 
-typeToString : Bool -> Type -> String
+typeToString_ : Type -> String
+typeToString_ t =
+    Tuple.first (typeToString False t)
+
+
+typeToString : Bool -> Type -> ( String, Dict String Type )
 typeToString isInUnion t =
+    let
+        map f l =
+            typeToString False l
+                |> Tuple.mapFirst f
+
+        map2 f l r =
+            let
+                ( ls, ld ) =
+                    typeToString False l
+
+                ( rs, rd ) =
+                    typeToString False r
+            in
+            ( f ls rs, Dict.union ld rd )
+    in
     case t of
         DictType k v ->
-            "{ [ key: " ++ typeToString False k ++ "]: " ++ typeToString False v ++ " }"
+            map2
+                (\ks vs ->
+                    "{ [ key: " ++ ks ++ "]: " ++ vs ++ " }"
+                )
+                k
+                v
 
         ListType c ->
-            typeToString False c ++ "[]"
+            map (\cs -> cs ++ "[]") c
 
         NullableType c ->
-            typeToString False c ++ "?"
+            map (\cs -> cs ++ "?") c
 
         RecordType fields ->
             let
-                inner : String
-                inner =
+                ( inner, dict ) =
                     fields
                         |> List.map
                             (\( k, v, o ) ->
-                                if o then
-                                    k ++ ": " ++ typeToString False v ++ ";"
+                                map
+                                    (\vs ->
+                                        if o then
+                                            k ++ ": " ++ vs ++ ";"
 
-                                else
-                                    k ++ "? : " ++ typeToString False v ++ ";"
+                                        else
+                                            k ++ "? : " ++ vs ++ ";"
+                                    )
+                                    v
                             )
-                        |> String.concat
+                        |> List.unzip
+                        |> Tuple.mapBoth String.concat (List.foldl Dict.union Dict.empty)
             in
             if String.isEmpty inner then
-                "{}"
+                ( "{}", dict )
 
             else
-                "{ " ++ inner ++ " }"
+                ( "{ " ++ inner ++ " }", dict )
 
         UnitType ->
-            "{}"
+            ( "{}", Dict.empty )
 
         StringType (Just l) ->
-            Json.Encode.encode 0 (Json.Encode.string l)
+            ( Json.Encode.encode 0 (Json.Encode.string l), Dict.empty )
 
         StringType Nothing ->
-            "string"
+            ( "string", Dict.empty )
 
         NullType ->
-            "null"
+            ( "null", Dict.empty )
 
         AnyType ->
-            "any"
+            ( "any", Dict.empty )
 
         UnknownType ->
-            "unknown"
+            ( "unknown", Dict.empty )
 
         IntType ->
-            "number"
+            ( "number", Dict.empty )
 
         FloatType ->
-            "number"
+            ( "number", Dict.empty )
 
         BoolType (Just True) ->
-            "true"
+            ( "true", Dict.empty )
 
         BoolType (Just False) ->
-            "false"
+            ( "false", Dict.empty )
 
         BoolType Nothing ->
-            "boolean"
+            ( "boolean", Dict.empty )
 
         UnionType ls ->
             let
-                inner =
-                    String.join "|" (List.map (typeToString True) ls)
+                ( inner, dict ) =
+                    ls
+                        |> List.map (typeToString True)
+                        |> List.unzip
+                        |> Tuple.mapBoth (String.join "|") (List.foldl Dict.union Dict.empty)
             in
             if isInUnion then
-                "(" ++ inner ++ ")"
+                ( "(" ++ inner ++ ")", dict )
 
             else
-                inner
+                ( inner, dict )
 
-        NamedType name _ ->
-            name
+        NamedType name child ->
+            ( name, Dict.singleton name child )
 
 
 missingBranch : String -> Range -> Expression -> Result (Rule.Error {}) t
