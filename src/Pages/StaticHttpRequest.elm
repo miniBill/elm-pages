@@ -49,9 +49,7 @@ toBuildError path error =
         InternalFailure (Pages.Internal.FatalError.FatalError buildError) ->
             { title = "Internal error"
             , message =
-                [ Terminal.text <| "Please report this error!"
-                , Terminal.text ""
-                , Terminal.text ""
+                [ Terminal.text "Please report this error!\n  "
                 , Terminal.text buildError.body
                 ]
             , path = path
