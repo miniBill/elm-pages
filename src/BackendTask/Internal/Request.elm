@@ -6,7 +6,6 @@ reach the `elm-pages-internal://*` JS handlers without going through the
 public `BackendTask.Http.requestRaw` URL guard. Not exposed in the
 package — generated user-facing code routes via `Pages.Internal.DbRequest`
 instead, which restricts callers to the `db-*` runtime handlers.
-
 -}
 
 import BackendTask exposing (BackendTask)
@@ -75,8 +74,8 @@ requestWithHeaders { name, headers, body, expect } =
                         Err e ->
                             InternalError (FatalError.fromString (Json.Decode.errorToString e))
 
-                Just (Ok _) ->
-                    InternalError (FatalError.fromString "Unexpected response body type for internal request")
+                Just (Ok (RequestsAndPending.Response _ got)) ->
+                    InternalError (FatalError.fromString ("Unexpected response body type for internal request " ++ name ++ " - expected json, got " ++ responseBodyToString got))
 
                 Just (Err _) ->
                     InternalError (FatalError.fromString "Internal request failed")
@@ -84,6 +83,22 @@ requestWithHeaders { name, headers, body, expect } =
                 Nothing ->
                     InternalError (FatalError.fromString ("INTERNAL ERROR - expected response for internal request: elm-pages-internal://" ++ name))
         )
+
+
+responseBodyToString : RequestsAndPending.ResponseBody -> String
+responseBodyToString got =
+    case got of
+        RequestsAndPending.BytesBody _ ->
+            "bytes"
+
+        RequestsAndPending.StringBody _ ->
+            "a string"
+
+        RequestsAndPending.JsonBody _ ->
+            "json"
+
+        RequestsAndPending.WhateverBody ->
+            "unrecognized"
 
 
 {-| Internal request variant that decodes an error payload alongside the success decoder.
@@ -129,8 +144,8 @@ request2 { name, body, expect, onError, errorDecoder } =
                                 Err e ->
                                     ApiRoute (Err (onError e))
 
-                Just (Ok _) ->
-                    InternalError (FatalError.fromString "Unexpected response body type for internal request")
+                Just (Ok (RequestsAndPending.Response _ got)) ->
+                    InternalError (FatalError.fromString ("Unexpected response body type for internal request " ++ name ++ " - expected json, got " ++ responseBodyToString got))
 
                 Just (Err _) ->
                     -- On network error, return null so error decoder can handle it
@@ -198,8 +213,8 @@ requestBytesWithHeaders { name, headers, body, expect } =
                         Nothing ->
                             InternalError (FatalError.fromString "Bytes decoding failed for internal request")
 
-                Just (Ok _) ->
-                    InternalError (FatalError.fromString "Unexpected response body type for internal bytes request")
+                Just (Ok (RequestsAndPending.Response _ got)) ->
+                    InternalError (FatalError.fromString ("Unexpected response body type for internal request " ++ name ++ " - expected json, got " ++ responseBodyToString got))
 
                 Just (Err _) ->
                     InternalError (FatalError.fromString "Internal request failed")
