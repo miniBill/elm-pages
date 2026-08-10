@@ -117,6 +117,7 @@ import FatalError exposing (FatalError)
 import Json.Decode as Decode
 import Json.Encode as Encode
 import Pages.Internal.Script
+import TsJson.Decode as TsDecode
 import Tui.Effect as Effect
 import Tui.Effect.Internal as EffectInternal
 import Tui.Screen exposing (Screen)
@@ -654,7 +655,7 @@ processBatchedEventsHelp app sub context model accEffects events =
 
 decodeRawEvent : Decode.Value -> Maybe SubInternal.RawEvent
 decodeRawEvent value =
-    case Decode.decodeValue SubInternal.decodeRawEvent value of
+    case Decode.decodeValue (TsDecode.decoder SubInternal.decodeRawEvent) value of
         Ok event ->
             event
 

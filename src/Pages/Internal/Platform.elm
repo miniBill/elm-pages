@@ -22,6 +22,7 @@ import Form
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Http
+import InteropDefinitions
 import Json.Decode as Decode
 import Json.Encode
 import Pages.ConcurrentSubmission
@@ -38,6 +39,7 @@ import PagesMsg exposing (PagesMsg)
 import QueryParams
 import Task
 import Time
+import TsJson.Encode
 import Url exposing (Url)
 import UrlPath exposing (UrlPath)
 
@@ -1273,29 +1275,12 @@ perform config model effect =
         CancelRequest transitionKey ->
             Http.cancel (String.fromInt transitionKey)
 
-        FetchFrozenViews { path, query, body } ->
+        FetchFrozenViews data ->
             config.toJsPort
                 { json =
-                    Json.Encode.object
-                        [ ( "tag", Json.Encode.string "FetchFrozenViews" )
-                        , ( "path", Json.Encode.string path )
-                        , ( "query"
-                          , case query of
-                                Just q ->
-                                    Json.Encode.string q
-
-                                Nothing ->
-                                    Json.Encode.null
-                          )
-                        , ( "body"
-                          , case body of
-                                Just b ->
-                                    Json.Encode.string b
-
-                                Nothing ->
-                                    Json.Encode.null
-                          )
-                        ]
+                    TsJson.Encode.encoder
+                        InteropDefinitions.interop.fromElm
+                        (InteropDefinitions.FetchFrozenViews data)
                 , bytes = []
                 }
                 |> Cmd.map never
