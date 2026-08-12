@@ -29,8 +29,9 @@ hash requestDetails =
                 , TsEncode.required "url" .url TsEncode.string
                 , TsEncode.required "headers" .headers (TsEncode.list hashHeader)
                 , TsEncode.required "body" .body StaticHttpBody.encode
-                , TsEncode.required "env" .env (TsEncode.dict identity TsEncode.string)
-                , TsEncode.required "dir" .dir (TsEncode.list TsEncode.string)
+
+                -- , TsEncode.required "env" .env (TsEncode.dict identity TsEncode.string)
+                -- , TsEncode.required "dir" .dir (TsEncode.list TsEncode.string)
                 ]
             )
         |> Json.Encode.encode 0
